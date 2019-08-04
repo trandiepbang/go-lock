@@ -2,41 +2,47 @@
 package main
 
 import (
+	"flag"
+	device "go-lock/utils"
 	"time"
 
 	"github.com/muka/go-bluetooth/api"
 	log "github.com/sirupsen/logrus"
 )
 
-var devicesMap map[string]bool
+var configMachineID *string
+var configMaxRetryConnectCount *int
 
-const logLevel = log.DebugLevel
-const machineID = "30:95:E3:C8:33:49"
 const adapterID = "hci0"
+const logLevel = log.DebugLevel
 
-var isLocked bool
+var deviceUtils *device.DeviceUtils
 
 func main() {
-
 	log.SetLevel(logLevel)
+	deviceUtils = device.NewDeviceUtils()
+	configMachineID = flag.String("device", "", "a device mac addres")
+	configMaxRetryConnectCount = flag.Int("maxretry", 3, "numbers time try to reconnect device")
 
-	//clean up connection on exit
-	devicesMap = map[string]bool{
-		"30:95:E3:C8:33:49": true,
-		"78:00:9E:88:B6:13": false,
+	flag.Parse()
+
+	if *configMachineID == "" {
+		panic("You need to pass into device mac address")
 	}
+	log.Info("Device info : ", *configMachineID)
+
+	deviceUtils.SetMaxRetryCount(*configMaxRetryConnectCount)
 
 	for true {
-		time.Sleep(5 * time.Second)
+		time.Sleep(3 * time.Second)
 		startService()
 	}
 }
 
 func startService() {
+	//Clear device cache ...
 	api.ClearDevices()
 	devices, err := api.GetDevices()
-	// log.Debug(devices)
-	// log.Debug("Error ", err)
 	if err != nil {
 		panic(err)
 	}
@@ -46,29 +52,31 @@ func startService() {
 			log.Errorf("%s: Failed to get properties: %s", err.Error())
 			return
 		}
-		// log.Debug("Found RSSI ", props.RSSI)
-		if devicesMap[props.Address] {
-			isDeviceAvailable, err := api.GetDeviceByAddress(props.Address)
+		if props.Address == *configMachineID {
+			currDevice, err := api.GetDeviceByAddress(props.Address)
 			if err != nil {
 				panic(err)
 			}
-			// log.Debug("Connected : ", isDeviceAvailable.IsConnected())
-			if !isDeviceAvailable.IsConnected() {
+			if !currDevice.IsConnected() {
 				// Device not found
-				if !isLocked {
-					isLocked = true
+				log.Debug("Phone is disconnected trying to connect : ", props.Address)
+				if !deviceUtils.GetLockState() && deviceUtils.GetRetryCount() > *configMaxRetryConnectCount {
+					deviceUtils.SaveLockState(true)
+					deviceUtils.Lock()
 				}
-				isDeviceAvailable.Connect()
-				log.Debug("Phone is disconnected -- trying to connect ", props.Address)
+
+				deviceUtils.IncreRetryCount()
+				currDevice.Connect()
 				return
 			}
+
 			log.Infof("name=%s addr=%s rssi=%d", props.Name, props.Address, props.RSSI)
-			if isLocked {
-				//
-				isLocked = false
-
+			if deviceUtils.GetLockState() {
+				deviceUtils.SaveLockState(false)
+				deviceUtils.Unlock()
 			}
-		}
 
+			deviceUtils.ResetRetryCount()
+		}
 	}
 }
