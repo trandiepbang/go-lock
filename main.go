@@ -57,6 +57,7 @@ func startService() {
 			if err != nil {
 				panic(err)
 			}
+
 			if !currDevice.IsConnected() {
 				// Device not found
 				log.Debug("Phone is disconnected trying to connect : ", props.Address)
