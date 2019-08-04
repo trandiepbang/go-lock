@@ -22,7 +22,7 @@ func main() {
 	log.SetLevel(logLevel)
 	deviceUtils = device.NewDeviceUtils()
 	configMachineID = flag.String("device", "", "a device mac addres")
-	configMaxRetryConnectCount = flag.Int("maxretry", 3, "numbers time try to reconnect device")
+	configMaxRetryConnectCount = flag.Int("maxretry", 2, "numbers time try to reconnect device")
 
 	flag.Parse()
 
@@ -34,7 +34,7 @@ func main() {
 	deviceUtils.SetMaxRetryCount(*configMaxRetryConnectCount)
 
 	for true {
-		time.Sleep(3 * time.Second)
+		time.Sleep(1 * time.Second)
 		startService()
 	}
 }
@@ -61,7 +61,7 @@ func startService() {
 			if !currDevice.IsConnected() {
 				// Device not found
 				log.Debug("Phone is disconnected trying to connect : ", props.Address)
-				if !deviceUtils.GetLockState() && deviceUtils.GetRetryCount() > *configMaxRetryConnectCount {
+				if !deviceUtils.GetLockState() && deviceUtils.GetRetryCount() >= *configMaxRetryConnectCount {
 					deviceUtils.SaveLockState(true)
 					deviceUtils.Lock()
 				}
